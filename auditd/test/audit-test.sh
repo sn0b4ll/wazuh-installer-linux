@@ -55,8 +55,9 @@ PASS_COUNT=0; FAIL_COUNT=0; SKIP_COUNT=0
 # startup (env sourcing, PAM, etc.) are timestamped BEFORE our start marker.
 sleep 1
 
-# ausearch --start takes TWO separate args: date (MM/DD/YYYY) and time (HH:MM:SS)
-START_DATE=$(date '+%m/%d/%Y')
+# Use "today" keyword + HH:MM:SS. Passing a date string (MM/DD/YYYY) alongside
+# a time causes ausearch to silently return no results on some distros/locales;
+# "today" is always accepted regardless of locale settings.
 START_TIME=$(date '+%H:%M:%S')
 
 # Files created during tests that must be removed on exit
@@ -84,14 +85,14 @@ check_key() {
     local key="$1" desc="$2"
     sleep 1
     local output
-    output=$(ausearch -k "$key" --start "$START_DATE" "$START_TIME" 2>/dev/null || true)
+    output=$(ausearch -k "$key" --start today "$START_TIME" 2>/dev/null || true)
     if grep -qE "^type=SYSCALL|^type=CWD|^----$" <<< "$output"; then
         pass "$desc  (key: $key)"
         if $VERBOSE; then
             grep -E "^type=SYSCALL" <<< "$output" | tail -2 | sed 's/^/       /'
         fi
     else
-        fail "$desc  (key: $key) -- no events found since $START_DATE $START_TIME"
+        fail "$desc  (key: $key) -- no events found since $START_TIME"
     fi
 }
 
@@ -107,7 +108,7 @@ check_exec_key() {
 
     # Primary: did the specific key fire?
     local out
-    out=$(ausearch -k "$key" --start "$START_DATE" "$START_TIME" 2>/dev/null || true)
+    out=$(ausearch -k "$key" --start today "$START_TIME" 2>/dev/null || true)
     if grep -qE "^type=SYSCALL" <<< "$out"; then
         pass "$desc  (key: $key)"
         if $VERBOSE; then
@@ -120,7 +121,7 @@ check_exec_key() {
     # (exe=, name=, or EXECVE argv -- covers scripts where exe= is the interpreter)
     if [[ -n "$binary" ]]; then
         local exec_out
-        exec_out=$(ausearch -k exec --start "$START_DATE" "$START_TIME" 2>/dev/null || true)
+        exec_out=$(ausearch -k exec --start today "$START_TIME" 2>/dev/null || true)
         # Use here-string to avoid SIGPIPE with set -o pipefail:
         # 'echo "$var" | grep -q' exits immediately on match, leaving echo with a
         # broken pipe (exit 141). pipefail makes the pipeline return 141 even though
@@ -144,7 +145,7 @@ check_script_exec() {
 
     # Primary: specific key
     local out
-    out=$(ausearch -k "$key" --start "$START_DATE" "$START_TIME" 2>/dev/null || true)
+    out=$(ausearch -k "$key" --start today "$START_TIME" 2>/dev/null || true)
     if grep -qE "^type=SYSCALL" <<< "$out"; then
         pass "$desc  (key: $key)"
         return
@@ -153,7 +154,7 @@ check_script_exec() {
     # Fallback: look for the script path anywhere in exec events.
     # Use here-string (not echo | grep) to avoid SIGPIPE with set -o pipefail.
     local exec_out
-    exec_out=$(ausearch -k exec --start "$START_DATE" "$START_TIME" 2>/dev/null || true)
+    exec_out=$(ausearch -k exec --start today "$START_TIME" 2>/dev/null || true)
     if grep -qF "$script" <<< "$exec_out"; then
         pass "$desc  (script path found in exec events -- key '$key' merged into exec)"
         note "The event IS recorded; search with:  ausearch -k exec -i | grep '${script##*/}'"
@@ -193,7 +194,7 @@ require_root
 
 echo -e "${BOLD}================================================================${NC}"
 echo -e "${BOLD}  auditd rule trigger test${NC}"
-echo    "  started   : $START_DATE $START_TIME"
+echo    "  started   : $(date '+%m/%d/%Y') $START_TIME"
 echo    "  non-root  : ${NON_ROOT_USER:-(none found)}"
 echo    "  ausearch  : $(which ausearch)"
 echo -e "${BOLD}================================================================${NC}"

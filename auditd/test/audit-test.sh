@@ -7,7 +7,7 @@
 # to confirm that an event with the expected key was recorded.
 #
 # Usage:
-#   sudo bash /usr/local/bin/audit-test.sh [--verbose]
+#   sudo bash auditd/test/audit-test.sh [--verbose]
 #
 # --verbose  prints the matching ausearch output beneath each PASS result
 #
@@ -170,6 +170,7 @@ run_as_user() {
     runuser -l "$user" -s /bin/sh -c "$*" 2>/dev/null || true
 }
 
+# shellcheck disable=SC2317  # called via trap, not directly
 cleanup() {
     for f in "${TMPFILES[@]:-}"; do
         rm -f "$f" 2>/dev/null || true
@@ -470,7 +471,7 @@ check_key "mknod" "mknod syscall invoked (named FIFO)"
 # immediately reversed.
 TMP_MNT=$(mktemp -d /tmp/audit_mnt_XXXX)
 TMPFILES+=("$TMP_MNT")
-mount --bind "$TMP_MNT" "$TMP_MNT" 2>/dev/null && umount "$TMP_MNT" 2>/dev/null || true
+{ mount --bind "$TMP_MNT" "$TMP_MNT" && umount "$TMP_MNT"; } 2>/dev/null || true
 check_key "mount" "mount syscall invoked (self bind-mount)"
 
 # --------------------------------------------------------------------------- #

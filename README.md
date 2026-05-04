@@ -1,78 +1,113 @@
 # wazuh-auditd-laurel
 
-Wazuh detection rules for Linux audit logs processed by [LAUREL](https://github.com/threathunters-io/laurel). Includes auditd rules, a LAUREL installation script, and the Wazuh decoders/rules to make sense of it all.
-
-## What's in here
-
-```
-auditd/ubuntu/audit.rules       # auditd ruleset (Ubuntu-targeted, mostly portable)
-auditd/ubuntu/audit-test.sh     # Script to verify every audit rule fires correctly
-laurel/install-laurel.sh        # Builds and installs LAUREL from source
-wazuh/decoders/laurel_decoder.xml  # Wazuh decoder for LAUREL JSON output
-wazuh/rules/laurel_rules.xml    # Wazuh alerting rules for LAUREL events
-```
+Linux installer that deploys a [Wazuh](https://wazuh.com/) agent with hardened auditd logging and [LAUREL](https://github.com/threathunters-io/laurel) on any mainstream Linux distribution. Supports Ubuntu/Debian, RHEL/CentOS/AlmaLinux/Rocky, Fedora, Amazon Linux, and openSUSE/SLES.
 
 ## How the pieces fit together
 
-1. **auditd** captures kernel-level events (file access, execve, privilege escalation, etc.)
-2. **LAUREL** sits as an auditd plugin, enriches the raw audit events, and writes structured JSON
-3. **Wazuh agent** reads LAUREL's JSON log and forwards it to the Wazuh manager
-4. **Wazuh manager** decodes the JSON and evaluates it against the detection rules
-
-## Setup
-
-### Agent side (monitored host)
-
-0. If not yet installed, install auditd and clone this repository.
-
-1. Deploy the rules:
-   ```
-   sudo cp auditd/ubuntu/audit.rules /etc/audit/rules.d/audit.rules
-   systemctl restart auditd
-   ```
-
-2. Install LAUREL:
-   ```
-   sudo bash laurel/install-laurel.sh
-   ```
-
-### Manager side
-
-1. Deploy the decoder and rules:
-   ```
-   cp wazuh/decoders/laurel_decoder.xml /var/ossec/etc/decoders/
-   cp wazuh/rules/laurel_rules.xml /var/ossec/etc/rules/
-   ```
-   Or add the decoder and rules via the Dashboard.
-
-2. Restart the Wazuh manager:
-   ```
-   systemctl restart wazuh-manager
-   ```
-
-3. Add the LAUREL log to the group config for the agents:
-   ```xml
-   <localfile>
-     <log_format>json</log_format>
-     <location>/var/log/laurel/audit.log</location>
-   </localfile>
-   ```
-
-## Testing
-
-Run the audit rule verification script on the agent:
-
 ```
-sudo bash auditd/ubuntu/audit-test.sh --verbose
+auditd (kernel events)
+  └─▶ LAUREL plugin (enriches to JSON) ─▶ /var/log/laurel/audit.log
+        └─▶ Wazuh agent (forwards)
+              └─▶ Wazuh manager (decodes + evaluates rules ─▶ alerts)
 ```
 
-It triggers each audit rule category and checks that auditd recorded the expected events.
+## Quick start
+
+```bash
+sudo bash install.sh --manager <manager-ip-or-fqdn>
+```
+
+This installs:
+1. The **Wazuh agent** (configured and enrolled against your manager)
+2. **auditd** with the hardened ruleset from this repo
+3. **LAUREL** (built from source, registered as an auditd plugin)
+
+## All options
+
+```
+sudo bash install.sh --manager <addr> [OPTIONS]
+
+Required:
+  --manager <addr>                    Wazuh manager IP or FQDN
+
+Wazuh agent deployment variables:
+  --manager-port <port>               Manager connection port
+  --protocol <tcp|udp>                Communication protocol (default: TCP)
+  --registration-server <addr>        Enrollment server (default: --manager)
+  --registration-port <port>          Enrollment server port
+  --registration-password <pass>      Enrollment password
+  --keep-alive-interval <secs>        Agent keep-alive interval
+  --time-reconnect <secs>             Reconnection interval
+  --registration-ca <path>            CA certificate path for SSL enrollment
+  --registration-certificate <path>   Agent certificate path for SSL enrollment
+  --registration-key <path>           Agent key path for SSL enrollment
+  --agent-name <name>                 Agent name (default: hostname)
+  --agent-group <groups>              Comma-separated group list
+  --enrollment-delay <secs>           Post-enrollment delay
+
+Install options:
+  --wazuh-version <version>           Pin Wazuh version, e.g. 4.9.1 (default: latest)
+  --package-path <path>               Install from local .deb/.rpm (offline/air-gapped)
+  --skip-auditd                       Skip auditd + ruleset deployment
+  --skip-laurel                       Skip LAUREL installation
+  --dry-run                           Print actions without making changes
+  -h, --help                          Show full help
+```
+
+All `--flags` can also be set as environment variables (e.g. `WAZUH_MANAGER=10.0.0.1`). CLI flags take precedence.
+
+## Manager-side setup
+
+Deploy the Wazuh decoder and rules to your **Wazuh manager**:
+
+```bash
+cp wazuh/decoders/laurel_decoder.xml /var/ossec/etc/decoders/
+cp wazuh/rules/laurel_rules.xml      /var/ossec/etc/rules/
+systemctl restart wazuh-manager
+```
+
+Add the LAUREL log to the agent group configuration:
+
+```xml
+<localfile>
+  <log_format>json</log_format>
+  <location>/var/log/laurel/audit.log</location>
+</localfile>
+```
 
 ## What the rules cover
 
-The auditd ruleset and Wazuh rules cover: interactive command logging (all commands executed from a terminal session), privilege escalation, service/cron/kernel module changes, credential file access, SSH/PAM/sudoers modifications, SSL key access, network and firewall changes, time manipulation, DAC permission changes, data exfiltration indicators, reconnaissance tools, and Wazuh agent integrity monitoring.
+The auditd ruleset and Wazuh detection rules cover: interactive command logging, privilege escalation, service/cron/kernel module changes, credential file access, SSH/PAM/sudoers modifications, SSL key access, network and firewall changes, time manipulation, DAC permission changes, data exfiltration indicators, reconnaissance tools, and Wazuh agent integrity monitoring. MITRE ATT&CK technique IDs are mapped throughout.
 
-MITRE ATT&CK technique IDs are mapped in the Wazuh rules where applicable.
+## Testing auditd rules
+
+Run on the monitored host after installation:
+
+```bash
+sudo bash auditd/test/audit-test.sh --verbose
+```
+
+Triggers each rule category with safe, reversible actions and confirms the expected audit key was recorded.
+
+## Repo structure
+
+```
+install.sh                      ← main entrypoint
+lib/
+  common.sh                     ← shared helpers
+  detect.sh                     ← distro/arch detection
+  vars.sh                       ← CLI arg parsing + Wazuh var handling
+  install-wazuh-agent.sh        ← Wazuh agent installation
+  install-auditd.sh             ← auditd installation + ruleset deploy
+auditd/
+  rules/audit.rules             ← hardened auditd ruleset
+  test/audit-test.sh            ← rule trigger verification
+laurel/
+  install-laurel.sh             ← LAUREL build + install (also runs standalone)
+wazuh/
+  decoders/laurel_decoder.xml   ← Wazuh manager decoder
+  rules/laurel_rules.xml        ← Wazuh manager detection rules
+```
 
 ## License
 

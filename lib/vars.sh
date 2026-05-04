@@ -4,8 +4,9 @@
 usage() {
     cat <<'EOF'
 Usage: sudo bash install.sh --manager <address> [OPTIONS]
+       sudo bash install.sh --uninstall [--skip-auditd] [--skip-laurel] [--dry-run]
 
-Required:
+Required (install only):
   --manager <addr>                    Wazuh manager IP or FQDN  (WAZUH_MANAGER)
 
 Wazuh agent deployment variables:
@@ -26,8 +27,9 @@ Wazuh agent deployment variables:
 Install options:
   --wazuh-version <version>           Pin Wazuh agent version, e.g. 4.9.1 (default: latest)
   --package-path <path>               Install from local .deb/.rpm file (skips repo setup)
-  --skip-auditd                       Skip auditd installation and ruleset deployment
-  --skip-laurel                       Skip LAUREL installation
+  --uninstall                         Remove Wazuh agent, auditd rules, and LAUREL
+  --skip-auditd                       Skip auditd installation/removal and ruleset
+  --skip-laurel                       Skip LAUREL installation/removal
   --dry-run                           Print actions without executing them
   --verbose                           Enable verbose output
   -h, --help                          Show this help
@@ -57,6 +59,7 @@ parse_args() {
     : "${PACKAGE_PATH:=}"
     : "${SKIP_AUDITD:=false}"
     : "${SKIP_LAUREL:=false}"
+    : "${UNINSTALL:=false}"
     : "${DRY_RUN:=false}"
     : "${VERBOSE:=false}"
 
@@ -78,6 +81,7 @@ parse_args() {
             --enrollment-delay)             ENROLLMENT_DELAY="$2";               shift 2 ;;
             --wazuh-version)                WAZUH_VERSION="$2";                  shift 2 ;;
             --package-path)                 PACKAGE_PATH="$2";                   shift 2 ;;
+            --uninstall)                    UNINSTALL=true;                      shift   ;;
             --skip-auditd)                  SKIP_AUDITD=true;                    shift   ;;
             --skip-laurel)                  SKIP_LAUREL=true;                    shift   ;;
             --dry-run)                      DRY_RUN=true;                        shift   ;;
@@ -87,12 +91,15 @@ parse_args() {
         esac
     done
 
-    export DRY_RUN VERBOSE SKIP_AUDITD SKIP_LAUREL
+    export DRY_RUN VERBOSE SKIP_AUDITD SKIP_LAUREL UNINSTALL
 }
 
 validate_vars() {
-    [[ -n "${WAZUH_MANAGER}" ]] \
-        || die "--manager is required (or set WAZUH_MANAGER)"
+    # --manager is only required for installs, not for uninstall
+    if [[ "${UNINSTALL:-false}" != "true" ]]; then
+        [[ -n "${WAZUH_MANAGER}" ]] \
+            || die "--manager is required (or set WAZUH_MANAGER)"
+    fi
 
     if [[ -n "${WAZUH_PROTOCOL}" ]]; then
         local proto="${WAZUH_PROTOCOL^^}"

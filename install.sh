@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install.sh -- Full Wazuh agent installer for Linux
+# install.sh -- Full Wazuh agent installer/uninstaller for Linux
 #
-# Installs the Wazuh agent, auditd with a hardened ruleset, and LAUREL on any
+# Installs or removes the Wazuh agent, auditd ruleset, and LAUREL on any
 # mainstream Linux distribution. Run with --help for usage.
 #
 # Usage:
 #   sudo bash install.sh --manager <manager-ip> [OPTIONS]
+#   sudo bash install.sh --uninstall [--skip-auditd] [--skip-laurel]
 # =============================================================================
 set -euo pipefail
 
@@ -22,6 +23,8 @@ source "${REPO_DIR}/lib/detect.sh"
 source "${REPO_DIR}/lib/install-wazuh-agent.sh"
 # shellcheck source=lib/install-auditd.sh
 source "${REPO_DIR}/lib/install-auditd.sh"
+# shellcheck source=lib/uninstall.sh
+source "${REPO_DIR}/lib/uninstall.sh"
 # shellcheck source=laurel/install-laurel.sh
 source "${REPO_DIR}/laurel/install-laurel.sh"
 
@@ -35,7 +38,64 @@ export_wazuh_vars
 section "OS Detection"
 detect_os
 
-# ---- Header ----
+# ===========================================================================
+# UNINSTALL PATH
+# ===========================================================================
+if [[ "${UNINSTALL}" == "true" ]]; then
+    echo
+    echo -e "${BOLD}================================================================${NC}"
+    echo -e "${BOLD}  Wazuh Agent Uninstaller${NC}"
+    if [[ "${DRY_RUN}" == "true" ]]; then
+        echo -e "  ${YELLOW}Mode : DRY RUN — no changes will be made${NC}"
+    fi
+    echo -e "${BOLD}================================================================${NC}"
+    echo
+
+    # Uninstall in reverse order of installation
+    if [[ "${SKIP_LAUREL}" != "true" ]]; then
+        uninstall_laurel
+    else
+        info "Skipping LAUREL removal (--skip-laurel)"
+    fi
+
+    if [[ "${SKIP_AUDITD}" != "true" ]]; then
+        uninstall_auditd
+    else
+        info "Skipping auditd rules removal (--skip-auditd)"
+    fi
+
+    uninstall_wazuh_agent
+
+    # ---- Post-uninstall verification ----
+    section "Verification"
+
+    if [[ "${DRY_RUN}" != "true" ]]; then
+        if systemctl is-active --quiet wazuh-agent 2>/dev/null; then
+            warn "wazuh-agent service is still active"
+        else
+            ok "wazuh-agent  : not running"
+        fi
+        if [[ "${SKIP_LAUREL}" != "true" ]]; then
+            if pgrep -x laurel >/dev/null 2>&1; then
+                warn "LAUREL process still detected"
+            else
+                ok "laurel       : not running"
+            fi
+        fi
+    else
+        ok "[DRY-RUN] All removal phases would complete here"
+    fi
+
+    echo
+    echo -e "${BOLD}================================================================${NC}"
+    echo -e "${GREEN}${BOLD}  Uninstall complete.${NC}"
+    echo -e "${BOLD}================================================================${NC}"
+    exit 0
+fi
+
+# ===========================================================================
+# INSTALL PATH
+# ===========================================================================
 echo
 echo -e "${BOLD}================================================================${NC}"
 echo -e "${BOLD}  Wazuh Agent Installer${NC}"
@@ -48,7 +108,6 @@ if [[ "${DRY_RUN}" == "true"       ]]; then echo -e "  ${YELLOW}Mode       : DRY
 echo -e "${BOLD}================================================================${NC}"
 echo
 
-# ---- Install phases ----
 install_wazuh_agent
 
 if [[ "${SKIP_AUDITD}" != "true" ]]; then

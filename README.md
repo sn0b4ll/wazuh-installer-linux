@@ -1,4 +1,4 @@
-# wazuh-auditd-laurel
+# wazuh-installer-linux
 
 Linux installer that deploys a [Wazuh](https://wazuh.com/) agent with hardened auditd logging and [LAUREL](https://github.com/threathunters-io/laurel) on any mainstream Linux distribution. Supports Ubuntu/Debian, RHEL/CentOS/AlmaLinux/Rocky, Fedora, Amazon Linux, and openSUSE/SLES.
 
@@ -26,8 +26,9 @@ This installs:
 
 ```
 sudo bash install.sh --manager <addr> [OPTIONS]
+sudo bash install.sh --uninstall [OPTIONS]
 
-Required:
+Required (install only):
   --manager <addr>                    Wazuh manager IP or FQDN
 
 Wazuh agent deployment variables:
@@ -52,6 +53,12 @@ Install options:
   --skip-laurel                       Skip LAUREL installation
   --dry-run                           Print actions without making changes
   -h, --help                          Show full help
+
+Uninstall options:
+  --uninstall                         Remove Wazuh agent, auditd rules, and LAUREL
+  --skip-auditd                       Skip auditd rules removal
+  --skip-laurel                       Skip LAUREL removal
+  --dry-run                           Preview what would be removed
 ```
 
 All `--flags` can also be set as environment variables (e.g. `WAZUH_MANAGER=10.0.0.1`). CLI flags take precedence.
@@ -88,26 +95,6 @@ sudo bash auditd/test/audit-test.sh --verbose
 ```
 
 Triggers each rule category with safe, reversible actions and confirms the expected audit key was recorded.
-
-## Repo structure
-
-```
-install.sh                      ← main entrypoint
-lib/
-  common.sh                     ← shared helpers
-  detect.sh                     ← distro/arch detection
-  vars.sh                       ← CLI arg parsing + Wazuh var handling
-  install-wazuh-agent.sh        ← Wazuh agent installation
-  install-auditd.sh             ← auditd installation + ruleset deploy
-auditd/
-  rules/audit.rules             ← hardened auditd ruleset
-  test/audit-test.sh            ← rule trigger verification
-laurel/
-  install-laurel.sh             ← LAUREL build + install (also runs standalone)
-wazuh/
-  decoders/laurel_decoder.xml   ← Wazuh manager decoder
-  rules/laurel_rules.xml        ← Wazuh manager detection rules
-```
 
 ## License
 

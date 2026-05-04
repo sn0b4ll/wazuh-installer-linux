@@ -2,15 +2,6 @@
 
 Linux installer that deploys a [Wazuh](https://wazuh.com/) agent with hardened auditd logging and [LAUREL](https://github.com/threathunters-io/laurel) on any mainstream Linux distribution. Supports Ubuntu/Debian, RHEL/CentOS/AlmaLinux/Rocky, Fedora, Amazon Linux, and openSUSE/SLES.
 
-## How the pieces fit together
-
-```
-auditd (kernel events)
-  └─▶ LAUREL plugin (enriches to JSON) ─▶ /var/log/laurel/audit.log
-        └─▶ Wazuh agent (forwards)
-              └─▶ Wazuh manager (decodes + evaluates rules ─▶ alerts)
-```
-
 ## Quick start
 
 ```bash
